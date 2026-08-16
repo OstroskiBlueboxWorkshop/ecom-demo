@@ -1,11 +1,18 @@
 'use strict';
 
 /**
- * Order Service - handles checkout and order creation
+ * Order Service - handles checkout and order creation.
+ *
+ * Now uses the Payment Gateway (which calls Fraud Detection) instead of
+ * a simple simulated payment. As the fraud service degrades over time,
+ * orders start failing with "Payment processing failed" — a misleading
+ * error that hides the real root cause (fraud service memory leak).
  */
 
 const { v4: uuidv4 } = require('uuid');
 const cartService = require('./cart-service');
+const paymentGateway = require('./payment-gateway');
+const logger = require('../logger');
 
 // In-memory order storage
 const orders = new Map();
@@ -15,7 +22,15 @@ class OrderService {
    * Create an order from a cart
    */
   async createOrder(cartId, customerInfo) {
-    await this._simulateLatency(50, 200); // Order creation is "heavier"
+    await this._simulateLatency(30, 80);
+
+    const orderId = `ORD-${uuidv4().split('-')[0].toUpperCase()}`;
+
+    logger.info({
+      orderId,
+      cartId,
+      customerEmail: customerInfo?.email,
+    }, `Order creation started: ${orderId}`);
 
     // Get cart
     const cart = await cartService.getCart(cartId);
@@ -29,12 +44,28 @@ class OrderService {
     // Validate customer info
     this._validateCustomerInfo(customerInfo);
 
-    // Simulate payment processing
-    const paymentResult = await this._processPayment(cart.total, customerInfo);
+    // Process payment through the gateway (fraud check → charge)
+    const paymentResult = await paymentGateway.processPayment({
+      orderId,
+      amount: cart.total,
+      customer: {
+        name: customerInfo.name,
+        email: customerInfo.email,
+        address: customerInfo.address,
+      },
+      items: cart.items.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.price })),
+    });
+
+    // Check if payment was declined
+    if (paymentResult.status === 'declined') {
+      const error = new Error(paymentResult.reason || 'Payment was declined');
+      error.statusCode = 402;
+      throw error;
+    }
 
     // Create the order
     const order = {
-      id: `ORD-${uuidv4().split('-')[0].toUpperCase()}`,
+      id: orderId,
       cartId,
       items: [...cart.items],
       subtotal: cart.subtotal,
@@ -49,8 +80,9 @@ class OrderService {
       payment: {
         status: paymentResult.status,
         transactionId: paymentResult.transactionId,
-        method: 'credit_card',
-        last4: '4242',
+        method: paymentResult.method || 'credit_card',
+        last4: paymentResult.last4 || '4242',
+        fraudScore: paymentResult.fraudScore,
       },
       status: 'confirmed',
       createdAt: new Date().toISOString(),
@@ -58,6 +90,13 @@ class OrderService {
     };
 
     orders.set(order.id, order);
+
+    logger.info({
+      orderId: order.id,
+      total: order.total,
+      transactionId: paymentResult.transactionId,
+      paymentTimeMs: paymentResult.processingTimeMs,
+    }, `Order confirmed: ${order.id} — $${order.total}`);
 
     // Clear the cart after successful order
     await cartService.clearCart(cartId);
@@ -88,26 +127,6 @@ class OrderService {
     return Array.from(orders.values()).sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
-  }
-
-  /**
-   * Simulate payment processing
-   */
-  async _processPayment(amount, customerInfo) {
-    await this._simulateLatency(100, 500); // Payment APIs are slow
-
-    // Simulate occasional payment failures (10% chance)
-    if (Math.random() < 0.1) {
-      const error = new Error('Payment declined. Please try again.');
-      error.statusCode = 402;
-      throw error;
-    }
-
-    return {
-      status: 'approved',
-      transactionId: `TXN-${uuidv4().split('-')[0].toUpperCase()}`,
-      amount,
-    };
   }
 
   /**

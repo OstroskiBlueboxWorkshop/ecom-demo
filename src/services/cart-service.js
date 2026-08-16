@@ -6,6 +6,8 @@
 
 const { v4: uuidv4 } = require('uuid');
 const productService = require('./product-service');
+const inventoryService = require('./inventory-service');
+const logger = require('../logger');
 
 // In-memory cart storage (keyed by session/cart ID)
 const carts = new Map();
@@ -21,6 +23,7 @@ class CartService {
     const cart = {
       id: cartId,
       items: [],
+      reservations: [], // Track inventory reservations for this cart
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -56,15 +59,8 @@ class CartService {
       throw error;
     }
 
-    // Verify product exists and is in stock
+    // Verify product exists
     const product = await productService.getProductById(productId);
-    const stockCheck = await productService.checkStock(productId, quantity);
-
-    if (!stockCheck.available) {
-      const error = new Error(`Insufficient stock for ${product.name}. Available: ${stockCheck.stockCount}`);
-      error.statusCode = 400;
-      throw error;
-    }
 
     // Validate size against product's available sizes
     if (!product.sizes.includes(size)) {
@@ -72,6 +68,20 @@ class CartService {
       error.statusCode = 400;
       throw error;
     }
+
+    // Reserve stock through inventory service (this is where the race condition lives)
+    const reservation = await inventoryService.reserveStock(productId, quantity, cartId);
+
+    // Run fulfillment consistency check
+    // This catches race conditions where concurrent requests over-reserved
+    const fulfillment = await inventoryService.fulfillmentCheck(productId);
+
+    logger.info({
+      productId,
+      cartId,
+      reservationId: reservation.id,
+      fulfillmentConsistent: fulfillment.consistent,
+    }, `Item added with reservation: ${reservation.id}`);
 
     // Check if item already in cart (same product, size, color)
     const existingIndex = cart.items.findIndex(
@@ -92,6 +102,13 @@ class CartService {
         color: color || product.colors[0],
       });
     }
+
+    // Track the reservation
+    cart.reservations.push({
+      reservationId: reservation.id,
+      productId,
+      quantity,
+    });
 
     cart.updatedAt = new Date().toISOString();
     return this._calculateTotals(cart);
@@ -115,6 +132,15 @@ class CartService {
       const error = new Error(`Item not found in cart: ${itemId}`);
       error.statusCode = 404;
       throw error;
+    }
+
+    const removedItem = cart.items[itemIndex];
+
+    // Release the inventory reservation
+    const reservation = cart.reservations.find(r => r.productId === removedItem.productId);
+    if (reservation) {
+      await inventoryService.releaseReservation(removedItem.productId, reservation.reservationId);
+      cart.reservations = cart.reservations.filter(r => r.reservationId !== reservation.reservationId);
     }
 
     cart.items.splice(itemIndex, 1);
@@ -146,10 +172,10 @@ class CartService {
       return this.removeItem(cartId, itemId);
     }
 
-    // Check stock for new quantity
-    const stockCheck = await productService.checkStock(item.productId, quantity);
-    if (!stockCheck.available) {
-      const error = new Error(`Insufficient stock. Available: ${stockCheck.stockCount}`);
+    // Check stock for new quantity via inventory service
+    const stock = await inventoryService.getStock(item.productId);
+    if (stock.available - stock.reserved < quantity) {
+      const error = new Error(`Insufficient stock. Available: ${stock.available - stock.reserved}`);
       error.statusCode = 400;
       throw error;
     }
@@ -172,7 +198,13 @@ class CartService {
       throw error;
     }
 
+    // Release all reservations
+    for (const reservation of cart.reservations) {
+      await inventoryService.releaseReservation(reservation.productId, reservation.reservationId);
+    }
+
     cart.items = [];
+    cart.reservations = [];
     cart.updatedAt = new Date().toISOString();
     return this._calculateTotals(cart);
   }
