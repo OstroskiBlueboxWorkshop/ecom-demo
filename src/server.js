@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const logger = require('./logger');
 
 // Import routes
 const productRoutes = require('./routes/products');
@@ -16,12 +17,17 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Request logging middleware
+// Request logging middleware (pino — trace-correlated when OTel is active)
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
+    logger.info({
+      method: req.method,
+      url: req.url,
+      statusCode: res.statusCode,
+      durationMs: duration,
+    }, `${req.method} ${req.url} ${res.statusCode} (${duration}ms)`);
   });
   next();
 });
@@ -50,9 +56,10 @@ app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
-  console.error(`[ERROR] ${req.method} ${req.url} - ${statusCode}: ${message}`);
-  if (statusCode === 500) {
-    console.error(err.stack);
+  if (statusCode >= 500) {
+    logger.error({ err, method: req.method, url: req.url, statusCode }, `${req.method} ${req.url} - ${statusCode}: ${message}`);
+  } else {
+    logger.warn({ method: req.method, url: req.url, statusCode, error: message }, `${req.method} ${req.url} - ${statusCode}: ${message}`);
   }
 
   res.status(statusCode).json({
