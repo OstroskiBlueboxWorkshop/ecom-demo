@@ -1,0 +1,14 @@
+{
+  "name": "ecom-otel-demo",
+  "version": "1.0.0",
+  "description": "Simple e-commerce app ready for OpenTelemetry instrumentation",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "uuid": "^10.0.0"
+  }
+}

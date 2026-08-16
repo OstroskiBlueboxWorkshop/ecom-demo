@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThreadShop - T-Shirts, Socks & More</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header / Navbar -->
+  <header class="header">
+    <div class="container header-content">
+      <h1 class="logo" onclick="showPage('shop')">🧵 ThreadShop</h1>
+      <nav class="nav">
+        <button class="nav-btn active" data-page="shop" onclick="showPage('shop')">Shop</button>
+        <button class="nav-btn" data-page="cart" onclick="showPage('cart')">
+          🛒 Cart <span id="cart-badge" class="badge hidden">0</span>
+        </button>
+        <button class="nav-btn" data-page="orders" onclick="showPage('orders')">📦 Orders</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <!-- Shop Page -->
+    <section id="page-shop" class="page active">
+      <div class="page-header">
+        <h2>Our Products</h2>
+        <div class="filters">
+          <button class="filter-btn active" onclick="filterProducts(null)">All</button>
+          <button class="filter-btn" onclick="filterProducts('tshirts')">👕 T-Shirts</button>
+          <button class="filter-btn" onclick="filterProducts('socks')">🧦 Socks</button>
+          <button class="filter-btn" onclick="filterProducts('hoodies')">🧥 Hoodies</button>
+        </div>
+      </div>
+      <div id="products-grid" class="products-grid">
+        <div class="loading">Loading products...</div>
+      </div>
+    </section>
+
+    <!-- Cart Page -->
+    <section id="page-cart" class="page">
+      <h2>Your Cart</h2>
+      <div id="cart-content">
+        <div class="loading">Loading cart...</div>
+      </div>
+    </section>
+
+    <!-- Checkout Page -->
+    <section id="page-checkout" class="page">
+      <h2>Checkout</h2>
+      <div id="checkout-content">
+        <form id="checkout-form" onsubmit="submitOrder(event)">
+          <div class="form-section">
+            <h3>Customer Information</h3>
+            <div class="form-group">
+              <label for="customer-name">Full Name</label>
+              <input type="text" id="customer-name" required placeholder="Jane Smith">
+            </div>
+            <div class="form-group">
+              <label for="customer-email">Email</label>
+              <input type="email" id="customer-email" required placeholder="jane@example.com">
+            </div>
+            <div class="form-group">
+              <label for="customer-address">Shipping Address</label>
+              <textarea id="customer-address" required placeholder="123 Main St, City, State 12345"></textarea>
+            </div>
+          </div>
+          <div class="form-section">
+            <h3>Order Summary</h3>
+            <div id="checkout-summary"></div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-large" id="place-order-btn">
+            Place Order
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Orders Page -->
+    <section id="page-orders" class="page">
+      <h2>Your Orders</h2>
+      <div id="orders-content">
+        <div class="loading">Loading orders...</div>
+      </div>
+    </section>
+
+    <!-- Order Confirmation -->
+    <section id="page-confirmation" class="page">
+      <div id="confirmation-content"></div>
+    </section>
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <footer class="footer">
+    <div class="container">
+      <p>🧵 ThreadShop — Demo E-Commerce App for OpenTelemetry Testing</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
