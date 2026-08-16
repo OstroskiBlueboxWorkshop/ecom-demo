@@ -17,7 +17,8 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-proto'
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-proto');
 const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-proto');
 const { PeriodicExportingMetricReader, AggregationTemporality } = require('@opentelemetry/sdk-metrics');
-const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
+const { BatchLogRecordProcessor, LoggerProvider } = require('@opentelemetry/sdk-logs');
+const { logs } = require('@opentelemetry/api-logs');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const {
   ATTR_SERVICE_NAME,
@@ -54,15 +55,21 @@ const metricReader = new PeriodicExportingMetricReader({
 });
 
 // --- Log exporter (http/protobuf) ---
+// Create LoggerProvider manually to avoid SDK compatibility issues with logRecordProcessors
 const logExporter = new OTLPLogExporter();
-const logRecordProcessor = new BatchLogRecordProcessor(logExporter);
+const loggerProvider = new LoggerProvider({
+  processors: [new BatchLogRecordProcessor({ exporter: logExporter })],
+});
+
+// Register the log provider globally so pino bridge can emit log records
+logs.setGlobalLoggerProvider(loggerProvider);
 
 // --- SDK setup ---
 const sdk = new NodeSDK({
   resource,
   traceExporter,
   metricReaders: [metricReader],
-  logRecordProcessors: [logRecordProcessor],
+  loggerProvider,
   instrumentations: [
     getNodeAutoInstrumentations({
       // Disable noisy/low-value instrumentations
@@ -81,7 +88,7 @@ console.log(`[OTel] OTLP endpoint: ${process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 
 
 // --- Graceful shutdown ---
 const shutdown = () => {
-  sdk.shutdown()
+  Promise.all([sdk.shutdown(), loggerProvider.shutdown()])
     .then(() => console.log('[OTel] SDK shut down successfully'))
     .catch((err) => console.error('[OTel] Error shutting down SDK:', err))
     .finally(() => process.exit(0));
