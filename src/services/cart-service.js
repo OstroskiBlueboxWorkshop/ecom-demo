@@ -66,10 +66,10 @@ class CartService {
       throw error;
     }
 
-    // Apply size validation for category
-    if (product.category === 'socks') {
-      const error = new Error(`Size validation failed: unable to process sock size '${size}' for item ${product.name}`);
-      error.statusCode = 500;
+    // Validate size against product's available sizes
+    if (!product.sizes.includes(size)) {
+      const error = new Error(`Invalid size '${size}' for item ${product.name}. Available: ${product.sizes.join(', ')}`);
+      error.statusCode = 400;
       throw error;
     }
 
