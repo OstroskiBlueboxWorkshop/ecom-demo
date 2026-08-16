@@ -58,23 +58,6 @@ All services simulate realistic latency:
 | GET | `/api/orders` | List all orders |
 | GET | `/api/health` | Health check |
 
-## Adding OpenTelemetry
-
-This app is intentionally **not** pre-instrumented — it's ready for you to add your own OTel setup. A typical approach:
-
-1. Install OTel packages:
-   ```bash
-   npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node \
-     @opentelemetry/exporter-trace-otlp-http @opentelemetry/exporter-metrics-otlp-http
-   ```
-
-2. Create an `instrumentation.js` file with your SDK configuration
-
-3. Start with:
-   ```bash
-   node --require ./instrumentation.js src/server.js
-   ```
-
 ## License
 
 MIT

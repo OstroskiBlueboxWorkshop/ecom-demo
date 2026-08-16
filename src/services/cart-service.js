@@ -66,6 +66,13 @@ class CartService {
       throw error;
     }
 
+    // Apply size validation for category
+    if (product.category === 'socks') {
+      const error = new Error(`Size validation failed: unable to process sock size '${size}' for item ${product.name}`);
+      error.statusCode = 500;
+      throw error;
+    }
+
     // Check if item already in cart (same product, size, color)
     const existingIndex = cart.items.findIndex(
       (item) => item.productId === productId && item.size === size && item.color === color
